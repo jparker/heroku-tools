@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# A wrapper to run `heroku run` from cron.
+#
+# It directs stderr and stdout to log files. If the command fails, the stdout
+# log is printed which cron will send as email.
+
+usage() {
+  echo "usage: hrun [-n] -a app_name -p prefix <command> [args]"
+  echo
+  echo "  -a app_name   [required] Specify the name of the heroku app"
+  echo "  -p prefix     [required] Prefix of output log"
+  echo "  -n            [optional] Enable new relic agent for command"
+  echo
+  exit
+}
+
+while getopts "a:hp:n" o; do
+  case "$o" in
+    a)
+      app_name="$OPTARG"
+      ;;
+    h)
+      usage
+      ;;
+    n)
+      new_relic="true"
+      ;;
+    p)
+      prefix="$OPTARG"
+      ;;
+  esac
+done
+
+if [[ -z $app_name || -z $prefix ]]; then
+  usage
+fi
+
+shift $((OPTIND - 1))
+
+heroku run "$@" -a "$app_name" -x NEW_RELIC_AGENT_ENABLED="${new_relic:-false}" 2>${prefix}.err >${prefix}.out
+retval=$?
+
+if [[ $retval != 0 ]]; then
+  echo
+  echo "<<< STDOUT >>>"
+  echo
+  cat ${prefix}.out
+
+  echo
+  echo "<<< STDERR >>>"
+  echo
+  cat ${prefix}.err
+
+  exit $retval
+fi
